@@ -265,23 +265,40 @@ final class ExampleCommand extends Command {
   }
 
   private function generateTest(ClassType $class, array $fields, $bundle): void {
+    $nodeFields = $this->entityFieldManager->getFieldStorageDefinitions('node');
     $class->addMethod('createEntity')
       ->setPublic()
       ->setBody(sprintf('return %s::create();', $bundle))
       ->setReturnType($bundle);
 
     foreach ($fields as $field) {
+      /* @var FieldStorageConfigInterface $nodeField */
+      $nodeField = $nodeFields[$field];
+      if (!$nodeField) {
+        continue;
+      }
+      $fieldType = $nodeField->getType();
       $formattedField = str_replace('_', ' ', $field);
       $formattedField = ucwords($formattedField);
       $formattedField = str_replace(' ', '', $formattedField);
-      $testMethod = '$entity = $this->createEntity();' . PHP_EOL;
-      $testMethod .= \sprintf('$this->assertNull($entity->get%s());' . PHP_EOL, $formattedField);
-      $testMethod .= \sprintf('$entity->set%s(\'test\');' . PHP_EOL, $formattedField);
-      $testMethod .= \sprintf('$this->assertEquals(\'test\', $entity->get%s());', $formattedField);
-      $class->addMethod('test' . $formattedField)
-        ->setPublic()
-        ->setBody($testMethod);
+      match($fieldType) {
+        'string', 'text', 'text_long', 'string_long' => $this->stringTest($class, $formattedField),
+        //'integer' => $this->integerGetSet($class, $field),
+        //'boolean' => $this->booleanGetSet($class, $field),
+        //default => $this->stringGetSet($class, $field),
+        default => NULL,
+      };
     }
+  }
+
+  private function stringTest(ClassType $class, string $formattedField): void {
+    $testMethod = '$entity = $this->createEntity();' . PHP_EOL;
+    $testMethod .= \sprintf('$this->assertNull($entity->get%s());' . PHP_EOL, $formattedField);
+    $testMethod .= \sprintf('$entity->set%s(\'test\');' . PHP_EOL, $formattedField);
+    $testMethod .= \sprintf('$this->assertEquals(\'test\', $entity->get%s());', $formattedField);
+    $class->addMethod('test' . $formattedField)
+      ->setPublic()
+      ->setBody($testMethod);
   }
 
 }
